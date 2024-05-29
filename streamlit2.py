@@ -19,13 +19,9 @@ st.set_page_config(
     layout="wide",
 )
 
-# Memuat dan mempersiapkan data
-with st.sidebar :
-    stock_name = st.text_input('Kode Saham', 'BBCA.JK')
-    start_date = st.date_input('Tanggal Mulai', value=pd.to_datetime('2015-01-01').date())
-    end_date = st.date_input('Tanggal Akhir', value=pd.to_datetime('2024-01-01').date())
-    
 
+        
+    
 # Fungsi untuk memuat data dari Yahoo Finance
 def load_data(stock_name, start_date, end_date):
     df = yf.download(stock_name, start=start_date, end=end_date)
@@ -35,6 +31,13 @@ def load_data(stock_name, start_date, end_date):
     df = df.dropna()  # Menghapus baris dengan nilai kosong
     return df
 
+
+# Memuat dan mempersiapkan data
+with st.sidebar :
+    stock_name = st.text_input('Kode Saham', 'BBCA.JK')
+    start_date = st.date_input('Tanggal Mulai', value=pd.to_datetime('2015-01-01').date())
+    end_date = st.date_input('Tanggal Akhir', value=pd.to_datetime('2024-01-01').date())
+    
 # Fungsi untuk mempersiapkan data
 def prepare_data(df, window_size):
     # Debugging: Periksa apakah kolom 'Close' ada dalam DataFrame
@@ -100,6 +103,8 @@ with tuning:
     # Melatih model
     if st.button('Latih Model'):
         model.fit(x_train, y_train, epochs=int(epochs), batch_size=int(batch_size))
+        result = model.score(x_test, y_test)
+        print("Accuracy : {}".format(result))
         model.save('stock_prediction_model.h5')
         st.success('Model berhasil disimpan!')
 
@@ -173,26 +178,25 @@ with pricing_data:
     predictions = scaler.inverse_transform(predictions)
         
     #membuat Evaluasi Model 
-    rmse = np.sqrt(np.mean((y_test- predictions)**2))
-    mse = np.square(np.subtract(y_test,predictions)).mean() 
-    mae = np.mean(np.abs(y_test- predictions))
-        
+    RMSE = float(format(np.sqrt(mean_squared_error(y_test, predictions)),'.3f'))
+    MAE = mean_absolute_error(y_test, predictions)
+    MSE = mean_squared_error(y_test, predictions)
     # Menghitung akurasi prediksi
     actual_close = df['Close'][split+window_size:]
     predictions_flat = predictions.flatten()
     accuracy = []
-    
+
     # Menampilkan grafik perbandingan harga penutupan asli dan prediksi menggunakan plotly
     pred_fig = go.Figure()
     pred_fig.add_trace(go.Scatter(x=df.index[split+window_size:], y=df['Close'][split+window_size:], mode='lines', name='Harga Penutupan Asli', line=dict(color='blue')))
     pred_fig.add_trace(go.Scatter(x=df.index[split+window_size:], y=predictions.flatten(), mode='lines', name='Harga Prediksi', line=dict(color='red')))
-        
+    
     # Menghitung akurasi prediksi
     actual_close = df['Close'][split+window_size:]
     last_actual = actual_close.iloc[-1]
     last_prediction = predictions[-1][0]
     #accuracy = accuracy_score(last_actual,last_prediction)
-    accuracy = (1-abs(last_actual - last_prediction) / last_actual) * 100
+    accuracy = ((last_actual - last_prediction) / last_actual) * 100
         
     # Menambahkan anotasi akurasi pada grafik
     pred_fig.add_annotation(
@@ -202,6 +206,7 @@ with pricing_data:
         showarrow=True,
         arrowhead=1
     )
+    
     pred_fig.update_layout(
         title = 'Perbandingan Harga Penutupan Asli dan Prediksi',
         xaxis_title='Tanggal',
@@ -214,15 +219,11 @@ with pricing_data:
     def add_one_day(date):
         return date + pd.Timedelta(days=1)
 
-    if st.button('Tambah 1 Hari'):
-        end_date = add_one_day(end_date)
-        
     col1, col2,col3 = st.columns(3)
     with col1:
-        st.write(f'RMSE: {rmse:.2f}')
-        st.write(f'MSE: {mse:.2f}')
-        st.write(f'MAE: {mae:.2f}')
-            
+        st.write(f'RMSE: {RMSE:.2f}')
+        st.write(f'MAE: {MAE:.2f}')
+        st.write(f'MSE: {MSE:.2f}')
     with col2:
         st.write(f'Harga Penutupan Asli (Terakhir): {last_actual:.2f}')
         st.write(f'Harga Prediksi (Terakhir): {last_prediction:.2f}')
