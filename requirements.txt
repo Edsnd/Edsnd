@@ -2,3 +2,4 @@ tensorflow
 streamlit
 pandas
 scikit-learn
+yahoo-finance
