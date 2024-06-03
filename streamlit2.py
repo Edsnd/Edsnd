@@ -10,7 +10,6 @@ import streamlit as st
 from sklearn.metrics import mean_squared_error, mean_absolute_error, accuracy_score
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from datetime import timedelta
 
 # Set konfigurasi halaman
 st.set_page_config(
@@ -18,9 +17,6 @@ st.set_page_config(
     page_icon=":chart_with_upwards_trend:",
     layout="wide",
 )
-
-
-        
     
 # Fungsi untuk memuat data dari Yahoo Finance
 def load_data(stock_name, start_date, end_date):
@@ -30,7 +26,6 @@ def load_data(stock_name, start_date, end_date):
     # atau
     df = df.dropna()  # Menghapus baris dengan nilai kosong
     return df
-
 
 # Memuat dan mempersiapkan data
 with st.sidebar :
@@ -58,11 +53,10 @@ def prepare_data(df, window_size):
     x = np.reshape(x, (x.shape[0], x.shape[1], 1))
     return x, y, scaler
 
-
 # Streamlit interface
 st.title(f'Prediksi Harga Saham {stock_name}')
 st.write('Model dilatih menggunakan data dari Yahoo Finance')
-pricing_data, tuning = st.tabs(["Pricing Data", "Tuning Data"])
+pricing_data, tuning = st.tabs(["Data dan Grafik", "Tuning Model"])
 
 #window_size adalah rentang data yang ditampilkan dalam grafik
 window_size = 90
@@ -73,9 +67,15 @@ df = load_data(stock_name, start_date, end_date)
 with tuning:
     st.subheader('Tuning Model')
 
-    expander = st.expander("Tuning Terbaik")
+    expander = st.expander("Tuning Terbaik BBCA.JK")
     expander.write(
-        " Epoch = 10 , Batch Size = 24")
+        "1. Epoch = 10 , Batch Size = 24/32 , Layer 1 = 114, layer 2 = 50")
+    expander.write(
+        "2. Epoch = 10 , Batch Size = 16 , Layer 1 = 82, layer 2 = 18")
+    expander = st.expander("Tuning Terbaik GOTO.JK")
+    expander.write(
+        "1. Epoch = 10 , Batch Size = 24/32 , Layer 1 = 114, layer 2 = 50")
+    
     epochs = st.number_input('Jumlah Epoch', min_value=10, max_value=100, value=10, step=10)
     batch_size = st.number_input('Batch Size', min_value=8, max_value=64, value=32, step=8)
     units_1 = st.number_input('Unit LSTM Lapisan 1', min_value=32, max_value=128, value=50, step=32)
@@ -100,14 +100,12 @@ model.add(Dense(units=1))
 model.compile(optimizer='adam', loss='mean_squared_error',metrics = ['accuracy'])
 
 with tuning:
-    # Melatih model
     if st.button('Latih Model'):
         model.fit(x_train, y_train, epochs=int(epochs), batch_size=int(batch_size))
-        result = model.score(x_test, y_test)
-        print("Accuracy : {}".format(result))
+        loss, accuracy = model.evaluate(x_test, y_test)
+        print("Accuracy : {:.2f}".format(accuracy * 100))
         model.save('stock_prediction_model.h5')
         st.success('Model berhasil disimpan!')
-
 
 #mengfilter data dalam periode
 def filter_data(df, period):
@@ -125,16 +123,19 @@ def filter_data(df, period):
         return df
 
 with pricing_data:
+    
+    #Membuat radiobutton untuk melihat grafik yang ditentukan
+    col1, col2, = st.columns([3,2])
+
     #menampilkan grafik penutupan
     data2 = df
     data2['% Change'] = df['Adj Close'] / df['Adj Close'].shift(1) - 1
     data2.dropna(inplace = True)
-    st.write(data2)
+    with col1:
+        st.write(data2)
     
-    #Membuat radiobutton untuk melihat grafik yang ditentukan
-    col1, col2, col3,col4 = st.columns(4)
-    with col4:
-        period = st.radio("Pilih jangka waktu:", ('5 hari', '30 hari', '3 bulan', '1 tahun','5 tahun'))
+    with col2:
+        period = st.selectbox("Pilih jangka waktu:", ('5 hari', '30 hari', '3 bulan', '1 tahun','5 tahun'))
         filtered_data = filter_data(df, period)
 
     #mengload kembali model
@@ -152,7 +153,6 @@ with pricing_data:
                         row_heights=[0.7, 0.3],
                         subplot_titles=('Harga Penutupan Saham', 'Volume Perdagangan'))
     
-   
     # Menambahkan plot harga penutupan
     fig.add_trace(go.Scatter(x=filtered_data.index, y=filtered_data['Close'], mode='lines', name='Harga Penutupan'), row=1, col=1)
     fig.add_trace(go.Scatter(x=filtered_data.index, y=ma100, mode='lines', name='MA100', line=dict(color='red')), row=1, col=1)
@@ -165,11 +165,10 @@ with pricing_data:
         yaxis_title='Harga Penutupan (USD)',
         hovermode='x unified'
     )
-
     #menampilkan grafik
-    fig.update_yaxes(title_text='Volume', row=2, col=1)
-    with col1:
-        st.plotly_chart(fig)
+    #fig.update_yaxes(title_text='Volume', row=2, col=1)
+    #with col1:
+    st.plotly_chart(fig)
 
 with pricing_data:
     # Prediksi dan evaluasi
@@ -206,7 +205,6 @@ with pricing_data:
         showarrow=True,
         arrowhead=1
     )
-    
     pred_fig.update_layout(
         title = 'Perbandingan Harga Penutupan Asli dan Prediksi',
         xaxis_title='Tanggal',
@@ -215,10 +213,6 @@ with pricing_data:
     )
         
     st.plotly_chart(pred_fig)
-    # Tambahkan tombol untuk menambahkan 1 hari ke end_date
-    def add_one_day(date):
-        return date + pd.Timedelta(days=1)
-
     col1, col2,col3 = st.columns(3)
     with col1:
         st.write(f'RMSE: {RMSE:.2f}')
