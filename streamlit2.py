@@ -7,9 +7,11 @@ from tensorflow.keras.layers import Dense, LSTM, Bidirectional
 import yfinance as yf
 import matplotlib.pyplot as plt
 import streamlit as st
-from sklearn.metrics import mean_squared_error, mean_absolute_error, accuracy_score
+from sklearn import metrics
+from sklearn.metrics import mean_squared_error, mean_absolute_error, accuracy_score, confusion_matrix
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+
 
 # Set konfigurasi halaman
 st.set_page_config(
@@ -29,6 +31,8 @@ def load_data(stock_name, start_date, end_date):
 
 # Memuat dan mempersiapkan data
 with st.sidebar :
+    st.caption('Inputkan Kode Saham !')
+    st.caption('Contoh:  BBCA.JK, GOTO.JK, dan AAPL')
     stock_name = st.text_input('Kode Saham', 'BBCA.JK')
     start_date = st.date_input('Tanggal Mulai', value=pd.to_datetime('2015-01-01').date())
     end_date = st.date_input('Tanggal Akhir', value=pd.to_datetime('2024-01-01').date())
@@ -67,16 +71,15 @@ df = load_data(stock_name, start_date, end_date)
 with tuning:
     st.subheader('Tuning Model')
 
-    expander = st.expander("Tuning Terbaik BBCA.JK")
+    expander = st.expander("Tuning Terbaik Model Bidirectional LSTM")
     expander.write(
         "1. Epoch = 10 , Batch Size = 24/32 , Layer 1 = 114, layer 2 = 50")
     expander.write(
         "2. Epoch = 10 , Batch Size = 16 , Layer 1 = 82, layer 2 = 18")
-    expander = st.expander("Tuning Terbaik GOTO.JK")
     expander.write(
-        "1. Epoch = 10 , Batch Size = 24/32 , Layer 1 = 114, layer 2 = 50")
+        "3. Epoch = 100 , Batch Size = 24 , Layer 1 = 114, layer 2 = 50")
     
-    epochs = st.number_input('Jumlah Epoch', min_value=10, max_value=100, value=10, step=10)
+    epochs = st.number_input('Jumlah Epoch', min_value=10, max_value=1000, value=10, step=10)
     batch_size = st.number_input('Batch Size', min_value=8, max_value=64, value=32, step=8)
     units_1 = st.number_input('Unit LSTM Lapisan 1', min_value=32, max_value=128, value=50, step=32)
     units_2 = st.number_input('Unit LSTM Lapisan 2', min_value=16, max_value=64, value=50, step=16)
@@ -93,7 +96,6 @@ x_test, y_test = x[split:], y[split:]
 model = Sequential()
 model.add(Bidirectional(LSTM(units=units_1, return_sequences=True, input_shape=(x_train.shape[1], 1))))
 model.add(Bidirectional(LSTM(units=units_2)))
-
 model.add(Dense(units=1))
 
 # Kompilasi model
@@ -105,7 +107,12 @@ with tuning:
         loss, accuracy = model.evaluate(x_test, y_test)
         print("Accuracy : {:.2f}".format(accuracy * 100))
         model.save('stock_prediction_model.h5')
-        st.success('Model berhasil disimpan!')
+        st.success('Model berhasil disimpan!')        
+        
+    #if st.button('Load Model'):
+    #    load_button= model = tf.keras.models.load_model('stock_prediction_model.h5')    
+    #    st.success('Model berhasil dimuat!')
+        
 
 #mengfilter data dalam periode
 def filter_data(df, period):
@@ -139,8 +146,9 @@ with pricing_data:
         filtered_data = filter_data(df, period)
 
     #mengload kembali model
-    model = tf.keras.models.load_model('stock_prediction_model.h5')
+    model = tf.keras.models.load_model('stock_prediction_model_best.h5')
     predictions = model.predict(x_test)
+    
     predictions = scaler.inverse_transform(predictions)
 
     # Menampilkan grafik harga penutupan saham
@@ -156,7 +164,7 @@ with pricing_data:
     # Menambahkan plot harga penutupan
     fig.add_trace(go.Scatter(x=filtered_data.index, y=filtered_data['Close'], mode='lines', name='Harga Penutupan'), row=1, col=1)
     fig.add_trace(go.Scatter(x=filtered_data.index, y=ma100, mode='lines', name='MA100', line=dict(color='red')), row=1, col=1)
-    fig.add_trace(go.Scatter(x=filtered_data.index, y=ma200, mode='lines', name='MA200', line=dict(color='green')), row=1, col=1)
+    fig.add_trace(go.Scatter(x=filtered_data.index, y=ma200, mode='lines', name='MA200', line=dict(color='lime')), row=1, col=1)
      
     # Menambahkan plot volume perdagangan
     fig.add_trace(go.Bar(x=filtered_data.index, y=filtered_data['Volume'], name='Volume'), row=2, col=1)
@@ -165,21 +173,29 @@ with pricing_data:
         yaxis_title='Harga Penutupan (USD)',
         hovermode='x unified'
     )
-    #menampilkan grafik
-    #fig.update_yaxes(title_text='Volume', row=2, col=1)
-    #with col1:
     st.plotly_chart(fig)
 
 with pricing_data:
     # Prediksi dan evaluasi
     model = tf.keras.models.load_model('stock_prediction_model.h5')
+    model2 = tf.keras.models.load_model('stock_prediction_model_best.h5')
+
     predictions = model.predict(x_test)
     predictions = scaler.inverse_transform(predictions)
         
+    predictions2 = model2.predict(x_test)
+    predictions2 = scaler.inverse_transform(predictions2)
+    
     #membuat Evaluasi Model 
     RMSE = float(format(np.sqrt(mean_squared_error(y_test, predictions)),'.3f'))
     MAE = mean_absolute_error(y_test, predictions)
     MSE = mean_squared_error(y_test, predictions)
+
+    #membuat Evaluasi Model 
+    RMSE2 = float(format(np.sqrt(mean_squared_error(y_test, predictions2)),'.3f'))
+    MAE2 = mean_absolute_error(y_test, predictions2)
+    MSE2 = mean_squared_error(y_test, predictions2)
+
     # Menghitung akurasi prediksi
     actual_close = df['Close'][split+window_size:]
     predictions_flat = predictions.flatten()
@@ -188,15 +204,19 @@ with pricing_data:
     # Menampilkan grafik perbandingan harga penutupan asli dan prediksi menggunakan plotly
     pred_fig = go.Figure()
     pred_fig.add_trace(go.Scatter(x=df.index[split+window_size:], y=df['Close'][split+window_size:], mode='lines', name='Harga Penutupan Asli', line=dict(color='blue')))
-    pred_fig.add_trace(go.Scatter(x=df.index[split+window_size:], y=predictions.flatten(), mode='lines', name='Harga Prediksi', line=dict(color='red')))
+    pred_fig.add_trace(go.Scatter(x=df.index[split+window_size:], y=predictions.flatten(), mode='lines', name='Harga Prediksi Model', line=dict(color='red')))
+    pred_fig.add_trace(go.Scatter(x=df.index[split+window_size:], y=predictions2.flatten(), mode='lines', name='Model Terbaik', line=dict(color='green')))
     
     # Menghitung akurasi prediksi
     actual_close = df['Close'][split+window_size:]
     last_actual = actual_close.iloc[-1]
     last_prediction = predictions[-1][0]
+    last_prediction2 = predictions2[-1][0]
+    
     #accuracy = accuracy_score(last_actual,last_prediction)
     accuracy = ((last_actual - last_prediction) / last_actual) * 100
-        
+    accuracy2 = ((last_actual - last_prediction2) / last_actual) * 100
+    
     # Menambahkan anotasi akurasi pada grafik
     pred_fig.add_annotation(
         x=df.index[-1],
@@ -205,6 +225,7 @@ with pricing_data:
         showarrow=True,
         arrowhead=1
     )
+    
     pred_fig.update_layout(
         title = 'Perbandingan Harga Penutupan Asli dan Prediksi',
         xaxis_title='Tanggal',
@@ -213,13 +234,25 @@ with pricing_data:
     )
         
     st.plotly_chart(pred_fig)
+
+    # Tambahkan tombol untuk menambahkan 1 hari ke end_date
+    def add_one_day(date):
+        return date + pd.Timedelta(days=1)
+
     col1, col2,col3 = st.columns(3)
     with col1:
         st.write(f'RMSE: {RMSE:.2f}')
         st.write(f'MAE: {MAE:.2f}')
         st.write(f'MSE: {MSE:.2f}')
-    with col2:
         st.write(f'Harga Penutupan Asli (Terakhir): {last_actual:.2f}')
         st.write(f'Harga Prediksi (Terakhir): {last_prediction:.2f}')
         st.write(f'Akurasi Prediksi: {accuracy:.2f}%')
+    with col2:
+        
+        st.write(f'RMSE: {RMSE2:.2f}')
+        st.write(f'MAE: {MAE2:.2f}')
+        st.write(f'MSE: {MSE2:.2f}')
+        st.write(f'Harga Penutupan Asli (Terakhir): {last_actual:.2f}')
+        st.write(f'Harga Prediksi (Terakhir): {last_prediction2:.2f}')
+        st.write(f'Akurasi Prediksi: {accuracy2:.2f}%')
                 
